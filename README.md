@@ -20,6 +20,10 @@ libraries.
 - A **tariff scenario engine** where scenarios are data in YAML, not code branches.
 - A CLI that prints inputs, a full cost waterfall, margins, breakevens and an
   open/closed verdict per scenario.
+- **Automated data ingestion (Phase 2):** COMEX `HG=F` and USDCNY history via
+  yfinance (backfilled from 2024-01-01 by default), LME indicative settlement
+  prices scraped respectfully from Westmetall (identifying User-Agent, per-day
+  local cache), all persisted to a SQLite price history.
 
 ## Market context
 
@@ -58,6 +62,32 @@ metalarb comex --lme 9500 --comex-cents-lb 480 --scenario phased_2027
 # Leg 2: China import parity
 metalarb shfe --lme 9500 --shfe-cny 78000 --usdcny 7.10
 ```
+
+Data ingestion (Phase 2 — requires the `ingest` extra, included in `[dev]`):
+
+```bash
+pip install -e ".[ingest]"
+
+# Backfill COMEX + FX from 2024-01-01 and scrape today's LME settlements
+metalarb ingest
+
+# Options: --start / --end (yfinance range), --db PATH,
+#          --skip-lme / --skip-yfinance (partial runs)
+metalarb ingest --start 2025-01-01 --db data/metalarb.sqlite
+
+# Inspect what's stored
+metalarb history
+metalarb history --symbol HG=F --limit 20
+```
+
+Prices are stored in **source-native units** (`HG=F` in USD/lb as Yahoo quotes
+it, `CNY=X` as a rate, LME in USD/mt) with schema
+`prices(date, source, symbol, price, unit, currency, ingested_at)` keyed on
+`(date, source, symbol)`, so re-running an ingest upserts rather than
+duplicates. This raw table is the future bronze layer of the Phase 4 medallion
+architecture; conversion to USD/mt happens downstream at the point of use.
+Computed arb metrics are deliberately **not** stored — they are recomputed from
+prices + current assumptions so a config change never leaves stale numbers.
 
 Tests and lint:
 
@@ -113,8 +143,10 @@ scenarios are added there with no code change.
 
 ## Limitations
 
-- **Delayed / indicative prices.** Nothing here is a live or licensed feed; users
-  supply prices manually in Phase 1.
+- **Delayed / indicative prices.** Nothing here is a live or licensed feed.
+  Yahoo Finance data is delayed and unofficial; Westmetall publishes LME
+  settlement prices as an indication only. Manual price inputs remain the
+  reference path for the calculators.
 - **Indicative freight and premiums.** Real desks use assessed physical premiums
   (Argus/Fastmarkets) and actual freight quotes; the config values are plausible
   placeholders only.
@@ -133,7 +165,7 @@ scenarios are added there with no code change.
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 1 | Core cost engine + scenario math + CLI, manual/config inputs, full pytest suite | **Done** |
-| 2 | Automated data ingestion (yfinance COMEX + FX; LME indicative), SQLite price history | Planned |
+| 2 | Automated data ingestion (yfinance COMEX + FX; LME indicative), SQLite price history | **Done** |
 | 3 | Streamlit dashboard: spread vs. breakeven bands, scenario toggles, waterfall chart | Planned |
 | 4 | Databricks Free Edition migration: bronze/silver/gold Delta tables, scheduled Workflows, Databricks SQL dashboard | Planned |
 

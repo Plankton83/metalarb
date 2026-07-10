@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 
@@ -162,6 +163,34 @@ class ShfeArbInputs:
         _require_positive(self.lme_price_usd_mt, "lme_price_usd_mt")
         _require_positive(self.shfe_price_cny_mt, "shfe_price_cny_mt")
         _require_positive(self.usdcny, "usdcny")
+
+
+@dataclass(frozen=True)
+class PriceRecord:
+    """One raw ingested price observation — the future bronze layer.
+
+    Prices are stored in source-native units (COMEX in USD/lb as Yahoo quotes
+    it, USDCNY as a rate, LME in USD/mt): the bronze layer keeps rows as-is,
+    and conversion to the internal USD/mt convention happens downstream at the
+    point of use, per the ingestion-boundary rule.
+    """
+
+    date: str
+    source: str
+    symbol: str
+    price: float
+    unit: str
+    currency: str
+
+    def __post_init__(self) -> None:
+        for field in ("source", "symbol", "unit", "currency"):
+            if not getattr(self, field):
+                raise ValueError(f"{field} must be non-empty")
+        _require_positive(self.price, "price")
+        try:
+            date.fromisoformat(self.date)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"date must be ISO 8601 (YYYY-MM-DD), got {self.date!r}") from exc
 
 
 @dataclass(frozen=True)

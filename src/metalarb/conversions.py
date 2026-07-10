@@ -23,6 +23,18 @@ def cents_per_lb_to_usd_per_mt(price_cents_lb: float) -> float:
     return price_cents_lb / 100 * LBS_PER_METRIC_TONNE
 
 
+def usd_per_lb_to_usd_per_mt(price_usd_lb: float) -> float:
+    """Convert a USD-per-pound quote to USD per metric tonne.
+
+    Yahoo Finance quotes COMEX HG in USD/lb (e.g. 4.80), whereas the exchange
+    convention is cents/lb; ingested rows keep the source-native USD/lb unit,
+    so this is the conversion used when reading them back.
+    """
+    if price_usd_lb <= 0:
+        raise ValueError(f"price_usd_lb must be strictly positive, got {price_usd_lb}")
+    return price_usd_lb * LBS_PER_METRIC_TONNE
+
+
 def usd_per_mt_to_cents_per_lb(price_usd_mt: float) -> float:
     """Inverse of :func:`cents_per_lb_to_usd_per_mt` (used for reporting)."""
     if price_usd_mt <= 0:

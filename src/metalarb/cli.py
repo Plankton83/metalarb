@@ -6,14 +6,17 @@ and formats the results. Keeping I/O out of the calculation modules is what
 makes them portable to PySpark later.
 
 Usage:
-    metalarb comex --lme 9500 --comex-cents-lb 480 [--scenario phased_2027 | --all-scenarios]
-    metalarb shfe  --lme 9500 --shfe-cny 78000 --usdcny 7.10
+    metalarb comex   --lme 9500 --comex-cents-lb 480 [--scenario phased_2027 | --all-scenarios]
+    metalarb shfe    --lme 9500 --shfe-cny 78000 --usdcny 7.10
+    metalarb ingest  [--start 2024-01-01] [--db data/metalarb.sqlite]
+    metalarb history [--symbol HG=F] [--limit 10] [--db data/metalarb.sqlite]
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import yaml
@@ -144,6 +147,66 @@ def _cmd_shfe(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    try:
+        from metalarb.ingest import fetchers
+    except ImportError:
+        print(
+            "error: ingestion dependencies are not installed - "
+            "run: pip install 'metalarb[ingest]'",
+            file=sys.stderr,
+        )
+        return 1
+    from metalarb.ingest import store
+
+    conn = store.connect(args.db)
+    jobs: list[tuple[str, Callable[[], list]]] = []
+    if not args.skip_yfinance:
+        jobs.append(
+            ("COMEX HG=F (yfinance)", lambda: fetchers.fetch_comex_history(args.start, args.end))
+        )
+        jobs.append(
+            ("USDCNY (yfinance)", lambda: fetchers.fetch_usdcny_history(args.start, args.end))
+        )
+    if not args.skip_lme:
+        jobs.append(("LME settlements (Westmetall)", fetchers.fetch_lme_settlements))
+
+    any_succeeded = False
+    for label, job in jobs:
+        try:
+            count = store.upsert_prices(conn, job())
+        except Exception as exc:  # keep other sources running on a partial failure
+            print(f"{label}: FAILED ({exc})", file=sys.stderr)
+        else:
+            print(f"{label}: upserted {count} rows")
+            any_succeeded = True
+    print(f"database: {args.db}")
+    return 0 if any_succeeded else 1
+
+
+def _cmd_history(args: argparse.Namespace) -> int:
+    from metalarb.ingest import store
+
+    if not Path(args.db).exists():
+        print(f"error: no price database at {args.db}; run 'metalarb ingest' first",
+              file=sys.stderr)
+        return 1
+    conn = store.connect(args.db)
+    frame = store.price_history(conn, args.symbol)
+    if frame.empty:
+        target = f"symbol {args.symbol!r}" if args.symbol else "database"
+        print(f"error: no rows stored for {target}", file=sys.stderr)
+        return 1
+
+    print("\nLatest observation per symbol")
+    latest = frame.sort_values("date").groupby("symbol").tail(1)
+    print(latest.to_string(index=False))
+
+    print(f"\nLast {args.limit} rows" + (f" for {args.symbol}" if args.symbol else ""))
+    print(frame.tail(args.limit).to_string(index=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="metalarb",
@@ -177,6 +240,36 @@ def build_parser() -> argparse.ArgumentParser:
     shfe.add_argument("--shfe-cny", type=float, required=True, help="SHFE price, CNY/mt")
     shfe.add_argument("--usdcny", type=float, required=True, help="USDCNY exchange rate")
     shfe.set_defaults(func=_cmd_shfe)
+
+    # Import here only for defaults, so `--help` shows real paths without
+    # requiring the ingest extra to be installed.
+    from metalarb.ingest.store import DEFAULT_DB_PATH
+
+    ingest = sub.add_parser(
+        "ingest", help="fetch prices (yfinance COMEX/FX + Westmetall LME) into SQLite"
+    )
+    ingest.add_argument(
+        "--start", default="2024-01-01", help="backfill start date for yfinance (ISO 8601)"
+    )
+    ingest.add_argument("--end", default=None, help="backfill end date (default: today)")
+    ingest.add_argument(
+        "--db", type=Path, default=DEFAULT_DB_PATH, help="SQLite database path"
+    )
+    ingest.add_argument(
+        "--skip-yfinance", action="store_true", help="skip COMEX and FX (yfinance)"
+    )
+    ingest.add_argument(
+        "--skip-lme", action="store_true", help="skip LME settlements (Westmetall scrape)"
+    )
+    ingest.set_defaults(func=_cmd_ingest)
+
+    history = sub.add_parser("history", help="show stored price history")
+    history.add_argument("--symbol", default=None, help="filter to one symbol (e.g. HG=F)")
+    history.add_argument("--limit", type=int, default=10, help="rows to display")
+    history.add_argument(
+        "--db", type=Path, default=DEFAULT_DB_PATH, help="SQLite database path"
+    )
+    history.set_defaults(func=_cmd_history)
 
     return parser
 

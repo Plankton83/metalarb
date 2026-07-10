@@ -8,6 +8,7 @@ from metalarb.conversions import (
     LBS_PER_METRIC_TONNE,
     cents_per_lb_to_usd_per_mt,
     cny_per_mt_to_usd_per_mt,
+    usd_per_lb_to_usd_per_mt,
     usd_per_mt_to_cents_per_lb,
     usd_per_mt_to_cny_per_mt,
 )
@@ -21,6 +22,18 @@ def test_cents_per_lb_known_value():
 def test_usd_per_mt_to_cents_known_value():
     """Inverse of the above: 10,582.176 USD/mt back to 480 cents/lb."""
     assert usd_per_mt_to_cents_per_lb(10_582.176) == pytest.approx(480)
+
+
+def test_usd_per_lb_known_value():
+    """Yahoo-style 4.80 USD/lb = 480 cents/lb = 10,582.176 USD/mt."""
+    assert usd_per_lb_to_usd_per_mt(4.80) == pytest.approx(10_582.176)
+    assert usd_per_lb_to_usd_per_mt(4.80) == pytest.approx(cents_per_lb_to_usd_per_mt(480))
+
+
+@pytest.mark.parametrize("bad", [0.0, -4.8])
+def test_usd_per_lb_rejects_nonpositive(bad: float):
+    with pytest.raises(ValueError):
+        usd_per_lb_to_usd_per_mt(bad)
 
 
 def test_cny_conversion_known_value():

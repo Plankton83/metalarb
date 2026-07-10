@@ -85,3 +85,79 @@ def test_invalid_price_reports_error(capsys):
     )
     assert exit_code == 1
     assert "error:" in capsys.readouterr().err
+
+
+def _stub_ingest_sources(monkeypatch):
+    """Replace all network fetchers with fixed records."""
+    from metalarb.models import PriceRecord
+
+    monkeypatch.setattr(
+        "metalarb.ingest.fetchers.fetch_comex_history",
+        lambda start, end: [PriceRecord("2026-07-09", "yfinance", "HG=F", 4.85, "USD/lb", "USD")],
+    )
+    monkeypatch.setattr(
+        "metalarb.ingest.fetchers.fetch_usdcny_history",
+        lambda start, end: [PriceRecord("2026-07-09", "yfinance", "CNY=X", 7.10, "CNY/USD", "CNY")],
+    )
+    monkeypatch.setattr(
+        "metalarb.ingest.fetchers.fetch_lme_settlements",
+        lambda: [PriceRecord("2026-07-09", "westmetall", "LME_Cu_3M", 9610.0, "USD/mt", "USD")],
+    )
+
+
+def test_ingest_then_history(tmp_path, monkeypatch, capsys):
+    _stub_ingest_sources(monkeypatch)
+    db = str(tmp_path / "prices.sqlite")
+
+    assert main(["ingest", "--db", db]) == 0
+    out = capsys.readouterr().out
+    assert "COMEX HG=F (yfinance): upserted 1 rows" in out
+    assert "LME settlements (Westmetall): upserted 1 rows" in out
+
+    assert main(["history", "--db", db]) == 0
+    out = capsys.readouterr().out
+    assert "HG=F" in out
+    assert "LME_Cu_3M" in out
+    assert "2026-07-09" in out
+
+
+def test_ingest_partial_failure_still_succeeds(tmp_path, monkeypatch, capsys):
+    """One dead source must not sink the whole ingest run."""
+    _stub_ingest_sources(monkeypatch)
+
+    def broken():
+        raise ValueError("site unreachable")
+
+    monkeypatch.setattr("metalarb.ingest.fetchers.fetch_lme_settlements", broken)
+    db = str(tmp_path / "prices.sqlite")
+
+    assert main(["ingest", "--db", db]) == 0
+    captured = capsys.readouterr()
+    assert "FAILED (site unreachable)" in captured.err
+    assert "upserted 1 rows" in captured.out
+
+
+def test_ingest_all_sources_fail(tmp_path, monkeypatch, capsys):
+    def broken(*args):
+        raise ValueError("down")
+
+    for target in ("fetch_comex_history", "fetch_usdcny_history", "fetch_lme_settlements"):
+        monkeypatch.setattr(f"metalarb.ingest.fetchers.{target}", broken)
+
+    assert main(["ingest", "--db", str(tmp_path / "p.sqlite")]) == 1
+
+
+def test_history_missing_db(tmp_path, capsys):
+    exit_code = main(["history", "--db", str(tmp_path / "absent.sqlite")])
+    assert exit_code == 1
+    assert "run 'metalarb ingest' first" in capsys.readouterr().err
+
+
+def test_history_unknown_symbol(tmp_path, monkeypatch, capsys):
+    _stub_ingest_sources(monkeypatch)
+    db = str(tmp_path / "prices.sqlite")
+    main(["ingest", "--db", db])
+    capsys.readouterr()
+
+    assert main(["history", "--db", db, "--symbol", "XX=Y"]) == 1
+    assert "no rows stored" in capsys.readouterr().err
