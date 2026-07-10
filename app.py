@@ -11,6 +11,7 @@ YAML path).
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -179,9 +180,12 @@ def main() -> None:
 
     try:
         conformed, metrics = load_metrics(str(DB_PATH), str(CONFIG_PATH))
-    except (FileNotFoundError, ValueError) as exc:
-        st.error(f"No usable price history: {exc}")
-        st.info("Run `metalarb ingest` first, then reload this page.")
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        st.error(f"No usable price history at {DB_PATH}: {exc}")
+        st.info(
+            "Run `metalarb ingest` first, then reload this page. If you set METALARB_DB, "
+            "make sure it points to a writable location."
+        )
         st.stop()
         return
 
