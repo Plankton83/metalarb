@@ -1,0 +1,29 @@
+# ALL values are indicative placeholders for a portfolio project.
+# Real desks use assessed premiums (Argus/Fastmarkets) and actual freight quotes.
+market:
+  sofr: 0.045                  # annualized, decimal
+  funding_spread: 0.015        # bank funding spread over SOFR, annualized
+
+lme_comex:
+  physical_premium_usd_mt: 250   # ex-warehouse premium, non-US origin
+  freight_usd_mt: 120            # Europe/Asia -> US Gulf, breakbulk/container indicative
+  insurance_rate: 0.003          # fraction of cargo value
+  transit_days: 30
+  customs_days: 5
+  warehouse_in_charges_usd_mt: 25
+  exit_freight_usd_mt: 120       # for the reverse-arb (US -> LME) view
+
+lme_shfe:
+  cif_premium_usd_mt: 100        # CIF Shanghai physical premium
+  vat_rate: 0.13                 # Chinese VAT on refined copper
+  admin_charge_cny_mt: 100       # flat administrative cost (real range ~80-150)
+
+scenarios:
+  - name: no_tariff
+    duty_rate: 0.00
+  - name: phased_2027
+    duty_rate: 0.15
+  - name: phased_2028
+    duty_rate: 0.30
+  - name: full_232
+    duty_rate: 0.50
