@@ -24,6 +24,10 @@ libraries.
   yfinance (backfilled from 2024-01-01 by default), LME indicative settlement
   prices scraped respectfully from Westmetall (identifying User-Agent, per-day
   local cache), all persisted to a SQLite price history.
+- **Streamlit dashboard (Phase 3):** the daily COMEX−LME spread against each
+  tariff scenario's breakeven band, scenario toggles, a cost-waterfall chart
+  for any stored date, KPI tiles (spread, open scenarios, exit margin), and a
+  data-table view of every computed metric.
 
 ## Market context
 
@@ -79,6 +83,20 @@ metalarb ingest --start 2025-01-01 --db data/metalarb.sqlite
 metalarb history
 metalarb history --symbol HG=F --limit 20
 ```
+
+Dashboard (Phase 3 — requires the `dashboard` extra, included in `[dev]`):
+
+```bash
+pip install -e ".[dashboard]"
+streamlit run app.py
+```
+
+The dashboard reads `data/metalarb.sqlite` (override with the `METALARB_DB`
+env var; `METALARB_CONFIG` overrides the assumptions path), so run
+`metalarb ingest` first. Every number on it comes through the same pure
+calculation modules as the CLI — the dashboard is a presentation layer only.
+The spread-vs-breakeven chart reads as: **the arb is open under a scenario
+while the solid spread line sits above that scenario's dashed breakeven line.**
 
 Prices are stored in **source-native units** (`HG=F` in USD/lb as Yahoo quotes
 it, `CNY=X` as a rate, LME in USD/mt) with schema
@@ -159,6 +177,8 @@ scenarios are added there with no code change.
   only; a real trade carries futures hedges on both exchanges, with margin calls
   and basis risk over the transit window.
 - **Static rates.** SOFR, FX and premiums are point-in-time inputs, not curves.
+- **Naive date alignment.** Daily spreads join COMEX closes (New York) with LME
+  settlements (London) on calendar date, mixing observation times hours apart.
 
 ## Roadmap
 
@@ -166,7 +186,7 @@ scenarios are added there with no code change.
 |-------|-------|--------|
 | 1 | Core cost engine + scenario math + CLI, manual/config inputs, full pytest suite | **Done** |
 | 2 | Automated data ingestion (yfinance COMEX + FX; LME indicative), SQLite price history | **Done** |
-| 3 | Streamlit dashboard: spread vs. breakeven bands, scenario toggles, waterfall chart | Planned |
+| 3 | Streamlit dashboard: spread vs. breakeven bands, scenario toggles, waterfall chart | **Done** |
 | 4 | Databricks Free Edition migration: bronze/silver/gold Delta tables, scheduled Workflows, Databricks SQL dashboard | Planned |
 
 The calculation modules are pure functions with no I/O or global state by design —

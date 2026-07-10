@@ -21,6 +21,10 @@ ingest = [
     "requests>=2.31",
     "lxml>=4.9",
 ]
+dashboard = [
+    "streamlit>=1.30",
+    "plotly>=5.18",
+]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
@@ -28,6 +32,8 @@ dev = [
     "yfinance>=0.2.40",
     "requests>=2.31",
     "lxml>=4.9",
+    "streamlit>=1.30",
+    "plotly>=5.18",
 ]
 
 [project.scripts]
