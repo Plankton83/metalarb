@@ -231,9 +231,7 @@ def main() -> None:
         "The arb is open under a scenario while the solid spread line is above that "
         "scenario's dashed breakeven line."
     )
-    st.plotly_chart(
-        spread_vs_breakeven_chart(metrics, selected, colors), use_container_width=True
-    )
+    st.plotly_chart(spread_vs_breakeven_chart(metrics, selected, colors), width="stretch")
 
     st.subheader("Cost waterfall")
     pick_date, pick_scenario = st.columns([1, 1])
@@ -247,12 +245,12 @@ def main() -> None:
     if day.empty:
         st.warning("No observation for that date/scenario combination.")
     else:
-        st.plotly_chart(waterfall_chart(day.iloc[0]), use_container_width=True)
+        st.plotly_chart(waterfall_chart(day.iloc[0]), width="stretch")
 
     with st.expander("Data table (all computed metrics for the selected range)"):
         st.dataframe(
             metrics[metrics["scenario"].isin(selected)].reset_index(drop=True),
-            use_container_width=True,
+            width="stretch",
         )
 
     st.caption(
